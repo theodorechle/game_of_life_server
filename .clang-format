@@ -1,0 +1,32 @@
+BasedOnStyle: LLVM
+UseTab: Never
+IndentWidth: 4
+TabWidth: 4
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterCaseLabel: false
+  AfterClass: false
+  AfterControlStatement: Never
+  AfterEnum: false
+  AfterFunction: false
+  AfterNamespace: false
+  AfterObjCDeclaration: false
+  AfterStruct: false
+  AfterUnion: false
+  AfterExternBlock: false
+  BeforeCatch: true
+  BeforeElse: true
+  BeforeLambdaBody: false
+  BeforeWhile: false
+IndentCaseLabels: false
+ColumnLimit: 150
+AccessModifierOffset: -4
+NamespaceIndentation: All
+FixNamespaceComments: true
+AllowShortIfStatementsOnASingleLine: AllIfsAndElse
+BreakBeforeBinaryOperators: NonAssignment
+BreakBinaryOperations: RespectPrecedence
+BreakTemplateDeclarations: Yes
+PointerAlignment: Right
+ReferenceAlignment: Right
+ReflowComments: Always
