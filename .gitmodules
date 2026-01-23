@@ -1,0 +1,4 @@
+[submodule "game_of_life_commons"]
+	path = game_of_life_commons
+	url = git@github.com:theodorechle/game_of_life_commons
+	branch = main

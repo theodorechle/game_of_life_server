@@ -1,12 +1,12 @@
 #include "network.hpp"
 
-ssize_t Network::sendCells(std::list<std::pair<size_t, Cell>> cells, int clientSocket) {
-    size_t contentLength = sizeof(char) * cells.size();
+ssize_t Network::sendCells(std::list<std::pair<size_t, Cell>> *cells, int clientSocket) {
+    size_t contentLength = sizeof(char) * cells->size();
     std::stringstream answer;
 
     answer << contentLength << "\n";
 
-    for (std::pair<size_t, Cell> cell : cells) {
+    for (std::pair<size_t, Cell> cell : *cells) {
         answer << cell.first << "\n" << cell.second.owner << "\n";
     }
     std::string answerStr = answer.str();
@@ -16,25 +16,56 @@ ssize_t Network::sendCells(std::list<std::pair<size_t, Cell>> cells, int clientS
     return send(clientSocket, answerStr.c_str(), answerStr.size(), MSG_NOSIGNAL); // MSG_NOSIGNAL ignore SIGPIPE (still return the error though)
 }
 
-bool Network::getClientInput(int clientSocket) {
-    size_t BUFFER_SIZE = 1024; // TODO: move it elsewhere
+int Network::getClientInput(int clientSocket, NetworkInputHandler *networkInputHandler) {
+    std::string data;
 
-    char buffer[BUFFER_SIZE] = {0};
+    int errorCode = networkInputHandler->readUntilDelimiter('\n', data, false, true);
 
-    ssize_t bytesRead = recv(clientSocket, buffer, BUFFER_SIZE, 0);
+    if (errorCode) {
+#ifdef DEBUG
+        std::cerr << "waiting messages? " << (errno == EAGAIN || errno == EWOULDBLOCK) << "\n";
+#endif
+        return errno != EAGAIN && errno != EWOULDBLOCK;
+    }
 
-    if (bytesRead == -1) return errno != EAGAIN && errno != EWOULDBLOCK; // if false, client haven't sent anything (non-blocking mode)
-    if (bytesRead == 0) return true;                                     // client disconnected
+    size_t contentLength = atoi(data.c_str());
 
-    size_t cellToggled = atoi(buffer);
-    std::cerr << "cellToggled: " << cellToggled << "\n";
-    _inputQueue->push(new ToggleCellInputEventData{clientSocket, InputEvent::TOGGLED_CELL, cellToggled});
-    return false;
+    std::string date;
+    errorCode = networkInputHandler->readUntilDelimiter('\n', date, false, true);
+
+    if (errorCode) {
+#ifdef DEBUG
+        std::cerr << "waiting messages? " << (errno == EAGAIN || errno == EWOULDBLOCK) << "\n";
+#endif
+        return errno != EAGAIN && errno != EWOULDBLOCK;
+    }
+
+    uint64_t tick = atoi(date.c_str());
+    std::cerr << "contentLength: " << contentLength << "\n";
+
+    std::unordered_set<size_t> indexes = {};
+
+    for (; contentLength > 0; contentLength--) {
+        errorCode = networkInputHandler->readUntilDelimiter('\n', data, false, true); // FIXME: should be blocking, to be sure the message is received
+        if (errorCode) return errorCode;
+        size_t pos = static_cast<size_t>(atoi(data.c_str()));
+        indexes.insert(pos);
+    }
+
+    _inputQueue->push(new ToggleCellsInputEventData{clientSocket, InputEvent::TOGGLE_CELLS, tick, indexes});
+
+    return 0;
 }
 
 bool Network::getClientInputs() {
-    for (int clientSocket : _clientSockets) {
-        if (getClientInput(clientSocket)) return true;
+    for (std::map<int, NetworkInputHandler>::iterator clientSocket = _clientSockets.begin(); clientSocket != _clientSockets.end();) {
+        int errorCode = getClientInput(clientSocket->first, &(clientSocket->second));
+        if (errorCode == 1) return true;
+        if (errorCode == 2) {
+            _inputQueue->push(new InputEventData{clientSocket->first, InputEvent::REMOVE_CLIENT});
+            clientSocket = _clientSockets.erase(clientSocket);
+        }
+        else clientSocket++;
     }
     return false;
 }
@@ -42,31 +73,29 @@ bool Network::getClientInputs() {
 bool Network::sendUpdateToClients() {
     UpdateToClients update;
     while (_clientUpdateQueue->tryPop(&update)) {
-        std::cerr << "nb clients: " << update.clients.size() << ", nb updated cells: " << update.updatedCells.size() << "\n";
+        std::cerr << "nb clients: " << update.clients.size() << ", nb updated cells: " << update.updatedCells->size() << "\n";
         for (int client : update.clients) {
             std::cerr << "update to client: " << client << "\n";
             if (sendCells(update.updatedCells, client) == -1) {
                 std::cerr << "error: " << errno << "\n";
                 _inputQueue->push(new InputEventData{client, InputEvent::REMOVE_CLIENT});
-                if (errno != EPIPE) {
+                if (errno != EPIPE && errno != ECONNRESET) {
+                    delete update.updatedCells;
                     return true;
                 }
             }
         }
+        delete update.updatedCells;
     }
     return false;
 }
 
-Network::~Network() {
-    close(serverSocket);
-    threadsRunning = false;
-}
-
-void Network::run() {
-    int serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+Network::Network(ThreadSafeQueue<InputEventData *> *inputQueue, ThreadSafeQueue<UpdateToClients> *clientUpdateQueue)
+    : _inputQueue{inputQueue}, _clientUpdateQueue{clientUpdateQueue} {
+    _serverSocket = socket(AF_INET, SOCK_STREAM, 0);
 
     int opt = 1;
-    setsockopt(serverSocket, SOL_SOCKET, SO_REUSEADDR, &opt,
+    setsockopt(_serverSocket, SOL_SOCKET, SO_REUSEADDR, &opt,
                sizeof(opt)); // allow reusing same adress on restart (else, the OS will keep it used for a while)
 
     sockaddr_in serverAddress{};
@@ -74,58 +103,61 @@ void Network::run() {
     serverAddress.sin_port = htons(8080);
     serverAddress.sin_addr.s_addr = INADDR_ANY;
 
-    if (bind(serverSocket, (struct sockaddr *)&serverAddress, sizeof(serverAddress)) < 0) {
-        perror("bind failed");
+    if (bind(_serverSocket, (struct sockaddr *)&serverAddress, sizeof(serverAddress)) < 0) {
+        throw NetworkException("bind failed: " + std::string(strerror(errno)));
         return;
     }
 
-    if (listen(serverSocket, 15) == -1) { // TODO: const
-        perror("listen failed");
+    if (listen(_serverSocket, 15) == -1) { // TODO: const
+        throw NetworkException("listen failed: " + std::string(strerror(errno)));
         return;
     }
 
-    int flags = fcntl(serverSocket, F_GETFL, 0);
+    int flags = fcntl(_serverSocket, F_GETFL, 0);
     if (flags == -1) {
-        perror("fcntl get failed");
+        throw NetworkException("fcntl get failed: " + std::string(strerror(errno)));
         return;
     }
 
     // set I/O to non-blocking
-    if (fcntl(serverSocket, F_SETFL, flags | O_NONBLOCK) == -1) {
-        perror("fcntl set failed");
+    if (fcntl(_serverSocket, F_SETFL, flags | O_NONBLOCK) == -1) {
+        throw NetworkException("fcntl set failed: " + std::string(strerror(errno)));
         return;
     }
+}
 
-    bool listenNewConnections = true;
+Network::~Network() {
+    close(_serverSocket);
+    threadsRunning = false;
+}
+
+void Network::run() {
     while (threadsRunning) {
         std::chrono::milliseconds tick = std::chrono::milliseconds(50);
         std::chrono::steady_clock::time_point next = std::chrono::steady_clock::now();
 
-        if (listenNewConnections) {
-
-            int clientSocket = accept(serverSocket, nullptr, nullptr);
-            if (clientSocket == -1) {
-                if (errno != EAGAIN && errno != EWOULDBLOCK) {
-                    perror("accept failed");
-                    return;
-                }
+        int clientSocket = accept(_serverSocket, nullptr, nullptr);
+        if (clientSocket == -1) {
+            if (errno != EAGAIN && errno != EWOULDBLOCK) {
+                perror("accept failed");
+                return;
             }
-            else {
-                int flags = fcntl(clientSocket, F_GETFL, 0);
-                if (flags == -1) {
-                    perror("fcntl on client get failed");
-                    return;
-                }
-
-                // set I/O to non-blocking
-                if (fcntl(clientSocket, F_SETFL, flags | O_NONBLOCK) == -1) {
-                    perror("fcntl on client set failed");
-                    return;
-                }
-                std::cerr << "accepted\n";
-                _clientSockets.push_back(clientSocket);
-                _inputQueue->push(new InputEventData{clientSocket, InputEvent::ADD_CLIENT});
+        }
+        else {
+            int flags = fcntl(clientSocket, F_GETFL, 0);
+            if (flags == -1) {
+                perror("fcntl on client get failed");
+                return;
             }
+
+            // set I/O to non-blocking
+            if (fcntl(clientSocket, F_SETFL, flags | O_NONBLOCK) == -1) {
+                perror("fcntl on client set failed");
+                return;
+            }
+            std::cerr << "accepted\n";
+            _clientSockets.insert({clientSocket, NetworkInputHandler(clientSocket)});
+            _inputQueue->push(new InputEventData{clientSocket, InputEvent::ADD_CLIENT});
         }
 
         if (getClientInputs()) {
@@ -144,5 +176,10 @@ void Network::run() {
 }
 
 void runNetworkLoop(ThreadSafeQueue<InputEventData *> *inputQueue, ThreadSafeQueue<UpdateToClients> *clientUpdateQueue) {
-    Network(inputQueue, clientUpdateQueue).run();
+    try {
+        Network(inputQueue, clientUpdateQueue).run();
+    }
+    catch (NetworkException &e) {
+        std::cerr << "network exception: " << e.what() << "\n";
+    }
 }

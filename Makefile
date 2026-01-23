@@ -3,6 +3,7 @@ CPP_FLAGS=-std=c++17 -Wall -g -MMD -MP
 BIN_DIR=bin
 OBJ_DIR=obj
 SRC_DIR=src
+COMMONS_LIB=game_of_life_commons/bin/game_of_life_commons_lib
 
 # Source files
 SRC=$(SRC_DIR)/main.cpp
@@ -25,7 +26,7 @@ endif
 all: $(MAIN)
 
 # Build everything except tests
-$(MAIN): $(OBJ)
+$(MAIN): $(OBJ) $(COMMONS_LIB).a
 	@mkdir -p $(BIN_DIR)
 	$(CPP_C) $(CPP_FLAGS) -o $@ $^
 
@@ -34,8 +35,11 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(dir $@)
 	$(CPP_C) $(CPP_FLAGS) -c $< -o $@
 
+$(COMMONS_LIB).a:
+	$(MAKE) -C game_of_life_commons -j lib DEBUG=$(DEBUG)
+
 # Clean all generated files
 clean:
 	@find obj -mindepth 1 ! -name .gitkeep -delete
 	@find bin -mindepth 1 ! -name .gitkeep -delete
-	$(MAKE) -C cpp_gui clean
+	$(MAKE) -C game_of_life_commons clean

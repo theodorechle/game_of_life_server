@@ -23,7 +23,7 @@ public:
     GameRunner(ThreadSafeQueue<InputEventData *> *inputQueue, ThreadSafeQueue<UpdateToClients> *clientUpdateQueue);
 
     void run();
-    void pullNewPlayers();
+    void pullInputQueue();
     void updateGames();
 };
 

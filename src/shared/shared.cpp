@@ -6,8 +6,8 @@ std::string inputEventToString(InputEvent &event) {
         return "add client";
     case InputEvent::REMOVE_CLIENT:
         return "remove client";
-    case InputEvent::TOGGLED_CELL:
-        return "toggle cell";
+    case InputEvent::TOGGLE_CELLS:
+        return "toggle cells";
     default:
         return "unknown type";
     }

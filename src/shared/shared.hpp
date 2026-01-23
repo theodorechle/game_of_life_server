@@ -5,6 +5,7 @@
 #include <list>
 #include <signal.h>
 #include <string>
+#include <unordered_set>
 
 constexpr int DEAD = 0;
 constexpr int NEUTRAL = 1;
@@ -19,21 +20,22 @@ struct Cell {
 
 struct UpdateToClients {
     std::list<int> clients;
-    // pair of alive, player who owned it
-    std::list<std::pair<size_t, Cell>> updatedCells;
+    // pair of alive, player who owned it, must be freed by caller
+    std::list<std::pair<size_t, Cell>> *updatedCells;
 };
 
-enum class InputEvent { ADD_CLIENT, REMOVE_CLIENT, TOGGLED_CELL };
+enum class InputEvent { ADD_CLIENT, REMOVE_CLIENT, TOGGLE_CELLS };
 
 std::string inputEventToString(InputEvent &event);
 
 struct InputEventData {
     int client;
     InputEvent event;
+    uint64_t tick;
 };
 
-struct ToggleCellInputEventData : InputEventData {
-    size_t cellIndex;
+struct ToggleCellsInputEventData : InputEventData {
+    std::unordered_set<size_t> indexes;
 };
 
 extern std::atomic<bool> threadsRunning;

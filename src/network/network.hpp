@@ -7,26 +7,29 @@
 #include <fcntl.h>
 #include <iomanip>
 #include <iostream>
+#include <map>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <thread>
 #include <unistd.h>
 
+#include "../../game_of_life_commons/src/network_input_handler/network_input_handler.hpp"
 #include "../thread_safe_queue/thread_safe_queue.hpp"
+#include "network_exception.hpp"
 
 class Network {
     ThreadSafeQueue<InputEventData *> *_inputQueue = nullptr;
     ThreadSafeQueue<UpdateToClients> *_clientUpdateQueue = nullptr;
-    std::list<int> _clientSockets = {};
+    std::map<int, NetworkInputHandler> _clientSockets = {};
 
-    int serverSocket;
+    int _serverSocket;
 
-    ssize_t sendCells(std::list<std::pair<size_t, Cell>> cells, int clientSocket);
+    ssize_t sendCells(std::list<std::pair<size_t, Cell>> *cells, int clientSocket);
 
     /**
-     * returns true on failure
+     * returns 0 on success, 1 on error and 2 on client disconnection
      */
-    bool getClientInput(int clientSocket);
+    int getClientInput(int clientSocket, NetworkInputHandler *networkInputHandler);
 
     /**
      * returns true on failure
@@ -39,8 +42,7 @@ class Network {
     bool sendUpdateToClients();
 
 public:
-    Network(ThreadSafeQueue<InputEventData *> *inputQueue, ThreadSafeQueue<UpdateToClients> *clientUpdateQueue)
-        : _inputQueue{inputQueue}, _clientUpdateQueue{clientUpdateQueue} {}
+    Network(ThreadSafeQueue<InputEventData *> *inputQueue, ThreadSafeQueue<UpdateToClients> *clientUpdateQueue);
 
     ~Network();
 

@@ -3,7 +3,7 @@
 GameRunner::GameRunner(ThreadSafeQueue<InputEventData *> *inputQueue, ThreadSafeQueue<UpdateToClients> *clientUpdateQueue)
     : _inputQueue{inputQueue}, _clientUpdateQueue{clientUpdateQueue} {}
 
-void GameRunner::pullNewPlayers() {
+void GameRunner::pullInputQueue() {
     InputEventData *event;
 
     while (_inputQueue->tryPop(&event)) {
@@ -20,6 +20,16 @@ void GameRunner::pullNewPlayers() {
                     if (game->players.size() == 1) games.erase(game);
                     else game->players.erase(user);
                     break;
+                }
+            }
+            break;
+        }
+        case InputEvent::TOGGLE_CELLS: {
+            ToggleCellsInputEventData *toggleCellsEvent = static_cast<ToggleCellsInputEventData *>(event);
+            for (std::list<GameWithPlayers>::iterator game = games.begin(); game != games.end(); game++) {
+                std::list<int>::const_iterator user = std::find(game->players.cbegin(), game->players.cend(), event->client);
+                if (user != game->players.cend()) {
+                    game->game.setCellStates(toggleCellsEvent->indexes, toggleCellsEvent->client, toggleCellsEvent->tick);
                 }
             }
             break;
@@ -43,7 +53,7 @@ void GameRunner::run() {
     std::chrono::steady_clock::time_point next = std::chrono::steady_clock::now();
 
     while (threadsRunning) {
-        pullNewPlayers();
+        pullInputQueue();
         updateGames();
         next += tick;
         std::this_thread::sleep_until(next);
