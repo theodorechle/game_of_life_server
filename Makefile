@@ -7,7 +7,7 @@ SRC_DIR=src
 # Source files
 SRC=$(SRC_DIR)/main.cpp
 
-SUBDIRS=shared game_thread network_thread
+SUBDIRS=shared game network
 SRC_SUBDIRS=$(foreach dir, $(SUBDIRS), $(wildcard $(SRC_DIR)/$(dir)/*.cpp))
 
 # Object files

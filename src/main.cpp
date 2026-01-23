@@ -1,5 +1,5 @@
-#include "game_thread/game_runner.hpp"
-#include "network_thread/network_thread.hpp"
+#include "game/game_runner.hpp"
+#include "network/network.hpp"
 #include "shared/shared.hpp"
 #include "thread_safe_queue/thread_safe_queue.hpp"
 #include <iostream>

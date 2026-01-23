@@ -39,7 +39,7 @@ void GameRunner::updateGames() {
 }
 
 void GameRunner::run() {
-    std::chrono::milliseconds tick = std::chrono::milliseconds(5000);
+    std::chrono::milliseconds tick = std::chrono::milliseconds(500);
     std::chrono::steady_clock::time_point next = std::chrono::steady_clock::now();
 
     while (threadsRunning) {

@@ -1,4 +1,4 @@
-#include "network_thread.hpp"
+#include "network.hpp"
 
 ssize_t Network::sendCells(std::list<std::pair<size_t, Cell>> cells, int clientSocket) {
     size_t contentLength = sizeof(char) * cells.size();
@@ -13,7 +13,7 @@ ssize_t Network::sendCells(std::list<std::pair<size_t, Cell>> cells, int clientS
 
     std::cerr << "sent data: '" << answerStr << ", size=" << answerStr.size() << "'\n";
 
-    return send(clientSocket, answerStr.c_str(), answerStr.size(), MSG_NOSIGNAL);
+    return send(clientSocket, answerStr.c_str(), answerStr.size(), MSG_NOSIGNAL); // MSG_NOSIGNAL ignore SIGPIPE (still return the error though)
 }
 
 bool Network::getClientInput(int clientSocket) {
@@ -21,10 +21,10 @@ bool Network::getClientInput(int clientSocket) {
 
     char buffer[BUFFER_SIZE] = {0};
 
-    ssize_t errorCode = recv(clientSocket, buffer, BUFFER_SIZE, 0);
+    ssize_t bytesRead = recv(clientSocket, buffer, BUFFER_SIZE, 0);
 
-    if (errorCode == -1) return errno != EAGAIN && errno != EWOULDBLOCK; // if false, client haven't sent anything (non-blocking mode)
-    if (errorCode == 0) return true;                                     // client disconnected
+    if (bytesRead == -1) return errno != EAGAIN && errno != EWOULDBLOCK; // if false, client haven't sent anything (non-blocking mode)
+    if (bytesRead == 0) return true;                                     // client disconnected
 
     size_t cellToggled = atoi(buffer);
     std::cerr << "cellToggled: " << cellToggled << "\n";
@@ -42,6 +42,7 @@ bool Network::getClientInputs() {
 bool Network::sendUpdateToClients() {
     UpdateToClients update;
     while (_clientUpdateQueue->tryPop(&update)) {
+        std::cerr << "nb clients: " << update.clients.size() << ", nb updated cells: " << update.updatedCells.size() << "\n";
         for (int client : update.clients) {
             std::cerr << "update to client: " << client << "\n";
             if (sendCells(update.updatedCells, client) == -1) {
@@ -78,7 +79,7 @@ void Network::run() {
         return;
     }
 
-    if (listen(serverSocket, 15) == -1) {
+    if (listen(serverSocket, 15) == -1) { // TODO: const
         perror("listen failed");
         return;
     }
@@ -97,7 +98,7 @@ void Network::run() {
 
     bool listenNewConnections = true;
     while (threadsRunning) {
-        std::chrono::milliseconds tick = std::chrono::milliseconds(500);
+        std::chrono::milliseconds tick = std::chrono::milliseconds(50);
         std::chrono::steady_clock::time_point next = std::chrono::steady_clock::now();
 
         if (listenNewConnections) {
@@ -110,6 +111,17 @@ void Network::run() {
                 }
             }
             else {
+                int flags = fcntl(clientSocket, F_GETFL, 0);
+                if (flags == -1) {
+                    perror("fcntl on client get failed");
+                    return;
+                }
+
+                // set I/O to non-blocking
+                if (fcntl(clientSocket, F_SETFL, flags | O_NONBLOCK) == -1) {
+                    perror("fcntl on client set failed");
+                    return;
+                }
                 std::cerr << "accepted\n";
                 _clientSockets.push_back(clientSocket);
                 _inputQueue->push(new InputEventData{clientSocket, InputEvent::ADD_CLIENT});
