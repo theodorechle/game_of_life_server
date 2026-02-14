@@ -7,13 +7,15 @@ void GameRunner::pullInputQueue() {
     InputEventData *event;
 
     while (_inputQueue->tryPop(&event)) {
-        std::cerr << "new event: " << inputEventToString(event->event) << " (from client: " << event->client << ")\n";
+        std::cerr << "new event: " << inputEventToString(event->event) << " (from client: " << event->client << "): ";
         switch (event->event) {
         case InputEvent::ADD_CLIENT:
+            std::cerr << event->client << "\n";
             if (games.empty() || games.back().players.size() == 4) games.push_back(GameWithPlayers{Game(10, 10), {event->client}});
             else games.back().players.push_back(event->client);
             break;
-        case InputEvent::REMOVE_CLIENT: {
+            case InputEvent::REMOVE_CLIENT: {
+            std::cerr << event->client << "\n";
             for (std::list<GameWithPlayers>::iterator game = games.begin(); game != games.end(); game++) {
                 std::list<int>::const_iterator user = std::find(game->players.cbegin(), game->players.cend(), event->client);
                 if (user != game->players.cend()) {
@@ -26,10 +28,15 @@ void GameRunner::pullInputQueue() {
         }
         case InputEvent::TOGGLE_CELLS: {
             ToggleCellsInputEventData *toggleCellsEvent = static_cast<ToggleCellsInputEventData *>(event);
+            std::cerr << "indexes: ";
+            for (size_t cell : toggleCellsEvent->indexes) {
+                std::cerr << cell << ", ";
+            }
+            std::cerr << "\n";
             for (std::list<GameWithPlayers>::iterator game = games.begin(); game != games.end(); game++) {
                 std::list<int>::const_iterator user = std::find(game->players.cbegin(), game->players.cend(), event->client);
                 if (user != game->players.cend()) {
-                    game->game.setCellStates(toggleCellsEvent->indexes, toggleCellsEvent->client, toggleCellsEvent->tick);
+                    game->game.setCellsState(toggleCellsEvent->indexes, toggleCellsEvent->client, toggleCellsEvent->tick);
                 }
             }
             break;
@@ -44,12 +51,13 @@ void GameRunner::pullInputQueue() {
 void GameRunner::updateGames() {
     for (GameWithPlayers &game : games) {
         std::cerr << "updating game\n";
-        _clientUpdateQueue->push(UpdateToClients{game.players, game.game.next()});
+        std::pair<uint64_t, UpdatedCells *> update = game.game.next();
+        _clientUpdateQueue->push(UpdateToClients{game.players, update.second, update.first});
     }
 }
 
 void GameRunner::run() {
-    std::chrono::milliseconds tick = std::chrono::milliseconds(500);
+    std::chrono::milliseconds tick = std::chrono::milliseconds(5000);
     std::chrono::steady_clock::time_point next = std::chrono::steady_clock::now();
 
     while (threadsRunning) {

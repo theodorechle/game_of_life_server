@@ -6,6 +6,7 @@
 #include <signal.h>
 #include <string>
 #include <unordered_set>
+#include <unordered_map>
 
 constexpr int DEAD = 0;
 constexpr int NEUTRAL = 1;
@@ -18,10 +19,13 @@ struct Cell {
     int owner = DEAD;
 };
 
+typedef std::unordered_map<size_t, Cell> UpdatedCells;
+
 struct UpdateToClients {
     std::list<int> clients;
     // pair of alive, player who owned it, must be freed by caller
-    std::list<std::pair<size_t, Cell>> *updatedCells;
+    UpdatedCells *updatedCells;
+    uint64_t tick;
 };
 
 enum class InputEvent { ADD_CLIENT, REMOVE_CLIENT, TOGGLE_CELLS };

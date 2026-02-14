@@ -1,10 +1,10 @@
 #include "network.hpp"
 
-ssize_t Network::sendCells(std::list<std::pair<size_t, Cell>> *cells, int clientSocket) {
+ssize_t Network::sendCells(int clientSocket, std::unordered_map<size_t, Cell> *cells, uint64_t tick) {
     size_t contentLength = sizeof(char) * cells->size();
     std::stringstream answer;
 
-    answer << contentLength << "\n";
+    answer << contentLength << "\n" << tick << "\n";
 
     for (std::pair<size_t, Cell> cell : *cells) {
         answer << cell.first << "\n" << cell.second.owner << "\n";
@@ -76,7 +76,7 @@ bool Network::sendUpdateToClients() {
         std::cerr << "nb clients: " << update.clients.size() << ", nb updated cells: " << update.updatedCells->size() << "\n";
         for (int client : update.clients) {
             std::cerr << "update to client: " << client << "\n";
-            if (sendCells(update.updatedCells, client) == -1) {
+            if (sendCells(client, update.updatedCells, update.tick) == -1) {
                 std::cerr << "error: " << errno << "\n";
                 _inputQueue->push(new InputEventData{client, InputEvent::REMOVE_CLIENT});
                 if (errno != EPIPE && errno != ECONNRESET) {

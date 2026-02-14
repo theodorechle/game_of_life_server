@@ -15,9 +15,11 @@ class Game {
     // wether the border is counted as dead cell or neutral
     bool _borderAlive;
 
-    std::list<std::pair<size_t, Cell>> *_changedCells = nullptr;
+    UpdatedCells *_changedCells = nullptr;
 
     void setCellState(size_t index, std::vector<Cell> *cells);
+
+    uint64_t _tick = 0;
 
 public:
     Game(int width, int height, bool borderAlive = false);
@@ -29,13 +31,13 @@ public:
     inline std::unordered_map<int, int> neighborsOwners(int x, int y, std::vector<Cell> *cells);
 
     // returns the index and the cell of each one who changed state
-    std::list<std::pair<size_t, Cell>> *next();
+    std::pair<uint64_t, UpdatedCells *> next();
 
     void setCellAlive(size_t index, int owner);
 
     void setCellDead(size_t index);
 
-    void setCellStates(std::unordered_set<size_t> indexes, int owner, uint64_t tick); // TODO: manage ticks
+    void setCellsState(std::unordered_set<size_t> indexes, int owner, uint64_t tick); // TODO: manage ticks
 };
 
 #endif // GAME_HPP

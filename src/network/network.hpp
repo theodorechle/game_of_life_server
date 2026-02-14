@@ -12,6 +12,7 @@
 #include <sys/socket.h>
 #include <thread>
 #include <unistd.h>
+#include <unordered_map>
 
 #include "../../game_of_life_commons/src/network_input_handler/network_input_handler.hpp"
 #include "../thread_safe_queue/thread_safe_queue.hpp"
@@ -24,7 +25,7 @@ class Network {
 
     int _serverSocket;
 
-    ssize_t sendCells(std::list<std::pair<size_t, Cell>> *cells, int clientSocket);
+    ssize_t sendCells(int clientSocket, std::unordered_map<size_t, Cell> *cells, uint64_t tick);
 
     /**
      * returns 0 on success, 1 on error and 2 on client disconnection
